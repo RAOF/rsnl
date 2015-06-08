@@ -32,16 +32,26 @@ extern "C" {
 	fn nlmsg_alloc() -> *const nl_msg;
 	fn nlmsg_free(msg: *const nl_msg);
 
+	pub fn nlmsg_hdr(msg: *const nl_msg) -> *const nlmsghdr;
+	pub fn nlmsg_attrdata(hdr: *const nlmsghdr, header_length: c_int) -> *const nl_attr;
 
+	pub fn nla_type(attr: *const nl_attr) -> c_int;
+	pub fn nla_get_u8(msg: *const nl_attr) -> u8;
+
+	fn nla_put_u8(msg: *const nl_msg, name: c_int, value: u8) -> c_int;
 }
 
 // exposed structures - these are wrapped
 #[repr(C)]
 struct nl_sock;
 #[repr(C)]
-struct nl_msg;
+pub struct nl_msg;
 #[repr(C)]
 struct nl_cb;
+#[repr(C)]
+pub struct nl_attr;
+#[repr(C)]
+pub struct nlmsghdr;
 
 // RSNL datatypes wrapping the libnl data structures
 pub struct socket {
@@ -138,6 +148,21 @@ impl socket {
 	}
 }
 
+impl Drop for socket {
+	fn drop(&mut self) {
+		self.free();
+	}
+}
+
+pub enum AttrPayload {
+	U8(u8),
+}
+
+pub struct Attribute {
+	name : i32,
+	payload : AttrPayload,
+}
+
 impl msg {
 	pub fn new() -> msg {
 	unsafe {
@@ -148,7 +173,51 @@ impl msg {
 	}
 	}
 
+	pub fn put(&mut self, attribute: &Attribute) {
+		unsafe {
+			match attribute.payload {
+				AttrPayload::U8(value) => nla_put_u8(self.ptr, attribute.name, value)
+			};
+		}
+	}
 	pub fn free(&self) {
 		unsafe{ nlmsg_free(self.ptr); }
+	}
+}
+
+impl Drop for msg {
+	fn drop(&mut self) {
+		self.free();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn emit_and_parse_u8_attribute() {
+		let attr_name = 3;
+		let attr_value = 5;
+		let attr_payload = AttrPayload::U8(attr_value);
+
+		let mut message = msg::new();
+		message.put(&Attribute { name: attr_name, payload: attr_payload});
+
+		let parsed_name = unsafe {
+			let header = nlmsg_hdr(message.ptr);
+			let raw_attr = nlmsg_attrdata(header, 0);
+			nla_type(raw_attr)
+		};
+
+		assert_eq!(attr_name, parsed_name);
+
+		let parsed_payload = unsafe {
+			let header = nlmsg_hdr(message.ptr);
+			let raw_attr = nlmsg_attrdata(header, 0);
+			nla_get_u8(raw_attr)
+		};
+
+		assert_eq!(attr_value, parsed_payload);
 	}
 }
