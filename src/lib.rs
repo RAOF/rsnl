@@ -111,12 +111,6 @@ impl socket {
 		}
 	}
 
-	pub fn free(&self) {
-		unsafe {
-			nl_socket_free(self.ptr)
-		}
-	}
-
 	pub fn set_buffer_size(&self, rxbuf: c_int, txbuf: c_int) -> i32 {
 		unsafe {
 			nl_socket_set_buffer_size(self.ptr, rxbuf, txbuf)
@@ -150,7 +144,9 @@ impl socket {
 
 impl Drop for socket {
 	fn drop(&mut self) {
-		self.free();
+		unsafe {
+			nl_socket_free(self.ptr);
+		}
 	}
 }
 
@@ -180,14 +176,13 @@ impl msg {
 			};
 		}
 	}
-	pub fn free(&self) {
-		unsafe{ nlmsg_free(self.ptr); }
-	}
 }
 
 impl Drop for msg {
 	fn drop(&mut self) {
-		self.free();
+		unsafe {
+			nlmsg_free(self.ptr);
+		}
 	}
 }
 
