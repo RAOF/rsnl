@@ -30,13 +30,18 @@ extern "C" {
 	fn nl_send_simple(socket: *const nl_sock, msg_type: c_int, flags: c_int, buf: *const u8, size: c_int) -> i32;
 	// Exposed msg functions
 	fn nlmsg_alloc() -> *const nl_msg;
+	fn nlmsg_alloc_simple(msg_type : c_int, flags : c_int) -> *const nl_msg;
 	fn nlmsg_free(msg: *const nl_msg);
 
 	pub fn nlmsg_hdr(msg: *const nl_msg) -> *const nlmsghdr;
 	pub fn nlmsg_attrdata(hdr: *const nlmsghdr, header_length: c_int) -> *const nl_attr;
+	pub fn nlmsg_attrlen(hdr: *const nlmsghdr, header_length: c_int) -> i32;
 
 	pub fn nla_type(attr: *const nl_attr) -> c_int;
 	pub fn nla_get_u8(msg: *const nl_attr) -> u8;
+
+	fn nla_next(cur : *const nl_attr, remaining : &mut i32) -> *const nl_attr;
+	fn nla_ok(cur : *const nl_attr, remaining: i32) -> bool;
 
 	fn nla_put_u8(msg: *const nl_msg, name: c_int, value: u8) -> c_int;
 }
@@ -150,29 +155,43 @@ impl Drop for socket {
 	}
 }
 
-pub enum AttrPayload {
+#[derive(Debug)]
+pub enum AttributeValue {
 	U8(u8),
 }
 
 pub struct Attribute {
-	name : i32,
-	payload : AttrPayload,
+	attr : *const nl_attr
+}
+
+impl Attribute {
+	unsafe fn from_ptr(wrappee : *const nl_attr) -> Attribute {
+		Attribute { attr : wrappee }
+	}
+
+	pub unsafe fn as_uint8(&self) -> u8 {
+		nla_get_u8(self.attr)
+	}
+
+	pub fn name(&self) -> i32 {
+		unsafe { nla_type(self.attr) }
+	}
 }
 
 impl msg {
 	pub fn new() -> msg {
-	unsafe {
-		let nlmsg = nlmsg_alloc();
-		msg { 
-			ptr: nlmsg
+	    unsafe {
+			let nlmsg = nlmsg_alloc();
+			msg {
+				ptr: nlmsg
+			}
 		}
 	}
-	}
 
-	pub fn put(&mut self, attribute: &Attribute) {
+	pub fn put(&mut self, name : i32, value : &AttributeValue) {
 		unsafe {
-			match attribute.payload {
-				AttrPayload::U8(value) => nla_put_u8(self.ptr, attribute.name, value)
+			match *value {
+				AttributeValue::U8(data) => nla_put_u8(self.ptr, name, data)
 			};
 		}
 	}
@@ -186,6 +205,44 @@ impl Drop for msg {
 	}
 }
 
+impl IntoIterator for msg {
+	type Item = Attribute;
+	type IntoIter = MsgIterator;
+
+	fn into_iter(self) -> Self::IntoIter {
+		unsafe {
+		MsgIterator { current: nlmsg_attrdata(nlmsg_hdr(self.ptr), 0),
+		              remaining : nlmsg_attrlen(nlmsg_hdr(self.ptr), 0) }
+		          }
+	}
+}
+
+pub struct MsgIterator {
+	current : *const nl_attr,
+	remaining : i32
+}
+
+impl Iterator for MsgIterator {
+	type Item = Attribute;
+	fn next(&mut self) -> Option<Attribute> {
+		if self.remaining > 0 {
+			unsafe {
+				if nla_ok(self.current, self.remaining) {
+					let cur = Attribute::from_ptr(self.current);
+					self.current = nla_next(self.current, &mut self.remaining);
+					Some(cur)
+				}
+				else {
+					None
+				}
+			}
+		}
+		else {
+			None
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -194,10 +251,10 @@ mod tests {
 	fn emit_and_parse_u8_attribute() {
 		let attr_name = 3;
 		let attr_value = 5;
-		let attr_payload = AttrPayload::U8(attr_value);
+		let attr_payload = AttributeValue::U8(attr_value);
 
 		let mut message = msg::new();
-		message.put(&Attribute { name: attr_name, payload: attr_payload});
+		message.put(attr_name, &attr_payload);
 
 		let parsed_name = unsafe {
 			let header = nlmsg_hdr(message.ptr);
@@ -214,5 +271,29 @@ mod tests {
 		};
 
 		assert_eq!(attr_value, parsed_payload);
+	}
+
+	#[test]
+	fn iterates_over_message_attributes() {
+		let names = [1, 5, 27];
+		let data : [u8; 3] = [8, 9, 22];
+		let mut attr_payload : [AttributeValue; 3] = [AttributeValue::U8(1), AttributeValue::U8(3) , AttributeValue::U8(5)];
+
+		for (index, value) in data.iter().enumerate() {
+			attr_payload[index] = AttributeValue::U8(*value);
+		}
+
+		let mut message = msg::new();
+
+		for (name, payload) in names.iter().zip(attr_payload.iter()) {
+			message.put(*name, payload);
+		}
+
+		for (index, attr) in message.into_iter().enumerate() {
+			unsafe {
+				assert_eq!(names[index], attr.name());
+				assert_eq!(data[index], attr.as_uint8());
+			}
+		}
 	}
 }
