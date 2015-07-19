@@ -237,6 +237,10 @@ impl Attribute {
 		bindings::nla_get_u8(self.attr)
 	}
 
+	pub unsafe fn as_uint16(&self) -> u16 {
+		bindings::nla_get_u16(self.attr)
+	}
+
 	pub fn name(&self) -> i32 {
 		unsafe { bindings::nla_type(self.attr) }
 	}
@@ -263,6 +267,20 @@ mod tests {
 				assert_eq!(names[index], attr.name());
 				assert_eq!(data[index], attr.as_uint8());
 			}
+		}
+	}
+
+	#[test]
+	fn add_and_read_u16_attribute() {
+		let name = 22;
+		let value : u16 = 3;
+
+		let mut message = Message::default();
+
+		message.put(name, &AttributeValue::U16(value));
+
+		unsafe {
+			assert_eq!(value, message.into_iter().next().unwrap().as_uint16());
 		}
 	}
 }
