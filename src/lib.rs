@@ -104,6 +104,8 @@ pub struct Message {
 	ptr: *mut bindings::Struct_nl_msg
 }
 
+use std::ffi::CString;
+
 impl Message {
 	pub fn new() -> Message {
 	    unsafe {
@@ -117,7 +119,16 @@ impl Message {
 	pub fn put(&mut self, name : i32, value : &AttributeValue) {
 		unsafe {
 			match *value {
-				AttributeValue::U8(data) => bindings::nla_put_u8(self.ptr, name, data)
+				AttributeValue::Raw(data) => bindings::nla_put(self.ptr, name, data.len() as i32, data as *const _ as *const ::libc::c_void),
+				AttributeValue::U8(data) => bindings::nla_put_u8(self.ptr, name, data),
+				AttributeValue::U16(data) => bindings::nla_put_u16(self.ptr, name, data),
+				AttributeValue::U32(data) => bindings::nla_put_u32(self.ptr, name, data),
+				AttributeValue::U64(data) => bindings::nla_put_u64(self.ptr, name, data),
+				AttributeValue::String(data) => bindings::nla_put_string(self.ptr, name, CString::new(data).unwrap().as_ptr()),
+				AttributeValue::Flag(true) => bindings::nla_put_flag(self.ptr, name),
+				AttributeValue::Flag(false) => 1,
+				AttributeValue::Msec(data) => bindings::nla_put_msecs(self.ptr, name, data),
+				AttributeValue::Nested(_) => unimplemented!()
 			};
 		}
 	}
@@ -201,8 +212,16 @@ pub enum NetlinkProtocol {
 }
 
 #[derive(Debug)]
-pub enum AttributeValue {
+pub enum AttributeValue<'a> {
+	Raw(&'a [u8]),
 	U8(u8),
+	U16(u16),
+	U32(u32),
+	U64(u64),
+	String(&'a str),
+	Flag(bool),
+	Msec(u64),
+	Nested(&'a [AttributeValue<'a>])
 }
 
 pub struct Attribute {
