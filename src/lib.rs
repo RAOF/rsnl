@@ -123,6 +123,12 @@ impl Message {
 	}
 }
 
+impl Default for Message {
+	fn default() -> Message {
+		Message::new()
+	}
+}
+
 impl Drop for Message {
 	fn drop(&mut self) {
 		unsafe {
