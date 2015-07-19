@@ -225,11 +225,7 @@ mod tests {
 	fn iterates_over_message_attributes() {
 		let names = [1, 5, 27];
 		let data : [u8; 3] = [8, 9, 22];
-		let mut attr_payload : [AttributeValue; 3] = [AttributeValue::U8(1), AttributeValue::U8(3) , AttributeValue::U8(5)];
-
-		for (index, value) in data.iter().enumerate() {
-			attr_payload[index] = AttributeValue::U8(*value);
-		}
+		let attr_payload : Vec<_> = data.iter().map(|val| AttributeValue::U8(*val)).collect();
 
 		let mut message = Message::new();
 
