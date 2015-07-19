@@ -3,3 +3,10 @@
 name = "rsnl"
 version = "0.0.1"
 authors = ["Charlie FG <charlie@carrotsrc.org>"]
+
+[dependencies]
+#bindgen_plugin = "0.14.0"
+libc = "*"
+
+[dependencies.bindgen_plugin]
+git = "https://github.com/crabtw/rust-bindgen.git"
