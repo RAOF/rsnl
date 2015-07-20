@@ -247,6 +247,10 @@ impl Attribute {
 		bindings::nla_get_u32(self.attr)
 	}
 
+	pub unsafe fn as_uint64(&self) -> u64 {
+		bindings::nla_get_u64(self.attr)
+	}
+
 	pub unsafe fn as_str<'a>(&'a self) -> &'a str {
 		std::str::from_utf8(CStr::from_ptr(bindings::nla_get_string(self.attr)).to_bytes()).unwrap()
 	}
@@ -305,6 +309,20 @@ mod tests {
 
 		unsafe {
 			assert_eq!(value, message.into_iter().next().unwrap().as_uint32());
+		}
+	}
+
+	#[test]
+	fn add_and_read_u64_attribute() {
+		let name = 37;
+		let value : u64 = 0xbaadf00ddeadbeef;
+
+		let mut message = Message::default();
+
+		message.put(name, &AttributeValue::U64(value));
+
+		unsafe {
+			assert_eq!(value, message.into_iter().next().unwrap().as_uint64());
 		}
 	}
 
