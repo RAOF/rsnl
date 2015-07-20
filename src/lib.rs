@@ -1,5 +1,6 @@
 #![feature(negate_unsigned)]
 #![feature(plugin)]
+#![feature(convert)]
 #![plugin(bindgen_plugin)]
 
 extern crate libc;
@@ -105,6 +106,7 @@ pub struct Message {
 }
 
 use std::ffi::CString;
+use std::ffi::CStr;
 
 impl Message {
 	pub fn new() -> Message {
@@ -241,6 +243,10 @@ impl Attribute {
 		bindings::nla_get_u16(self.attr)
 	}
 
+	pub unsafe fn as_str<'a>(&'a self) -> &'a str {
+		std::str::from_utf8(CStr::from_ptr(bindings::nla_get_string(self.attr)).to_bytes()).unwrap()
+	}
+
 	pub fn name(&self) -> i32 {
 		unsafe { bindings::nla_type(self.attr) }
 	}
@@ -281,6 +287,20 @@ mod tests {
 
 		unsafe {
 			assert_eq!(value, message.into_iter().next().unwrap().as_uint16());
+		}
+	}
+
+	#[test]
+	fn add_and_read_string_attribute() {
+		let name = 3;
+		let value = String::from("Aardarks");
+
+		let mut message = Message::default();
+
+		message.put(name, &AttributeValue::String(value.as_str()));
+
+		unsafe {
+			assert_eq!(value.as_str(), message.into_iter().next().unwrap().as_str());
 		}
 	}
 }
