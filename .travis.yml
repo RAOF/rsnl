@@ -5,4 +5,4 @@ addons:
   apt:
     packages:
     - libnl-3-dev
-    - libclang-3.5-dev
+    - libclang-3.4-dev
